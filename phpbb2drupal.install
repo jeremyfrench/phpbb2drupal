@@ -4,42 +4,48 @@
  * Install, update and uninstall functions for the phpbb2drupal module.
  *
  */
-
-/**
- * Implements hook_schema().
- */
-function phpbb2drupal_schema() {
-  $schema['phpbb2drupal_temp_forum'] = array(
-    'description' => 'Maps phpBB forum forum_id to Drupal taxonomy tid.',
-    'fields' => array(
-         'forum_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'small', 'not null' => TRUE, 'default' => 0, 'disp-width' => '5'),
-         'tid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0, 'disp-width' => '10')),
-    'primary key' => array('forum_id'),
+function phpbb2drupal_install() {
+  $user_fields = array(
+    array('user_im', st('IM Contacts'), st('Instant Message Contact Details'), FIELD_CARDINALITY_UNLIMITED),
+    array('user_from', st('From'), st('Place the user is from'), 1),
+    array('user_occ', st('Occupation'), st('What does the user do for a living'), 1),
+    array('user_interests', st('Interests'), st('What is the user interested in'), FIELD_CARDINALITY_UNLIMITED),
+    array('user_website', st('Website'), st('The user website URL'), FIELD_CARDINALITY_UNLIMITED)
   );
-
-  $schema['phpbb2drupal_temp_post'] = array(
-    'description' => 'Maps phpBB posts to Drupal comments.',
-    'fields' => array(
-         'post_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'medium', 'not null' => TRUE, 'default' => 0, 'disp-width' => '8'),
-         'cid' => array('type' => 'int', 'not null' => TRUE, 'default' => 0, 'disp-width' => '10')),
-    'primary key' => array('post_id'),
+  $instance = array(
+    'field_name' => '',
+    'entity_type' => 'user',
+    'bundle' => 'user',
+    'label' => '',
+    'description' => '',
+    'widget' => array(
+      'type' => 'text_textfield',
+      'weight' => 10
+    )
   );
+  foreach ($user_fields as $field) {
+    field_create_field(array(
+      'field_name' => $field[0],
+      'type' => 'text',
+      'cardinality' => $field[3]
+    ));
+    $instance['field_name'] = $field[0];
+    $instance['label'] = $field[1];
+    $instance['description'] = $field[2];
+    field_create_instance($instance);
+  }
+}
 
-  $schema['phpbb2drupal_temp_topic'] = array(
-    'description' => 'Maps phpBB topics and polls to Drupal Nodes.',
-    'fields' => array(
-         'topic_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'medium', 'not null' => TRUE, 'default' => 0, 'disp-width' => '8'),
-         'post_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'medium', 'not null' => TRUE, 'default' => 0, 'disp-width' => '8'),
-         'nid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0, 'disp-width' => '10')),
-    'primary key' => array('topic_id'),
-  );
-
-  $schema['phpbb2drupal_temp_user'] = array(
-    'description' => 'Maps phpBB  User (User_id) to Drupal User (uid).',
-    'fields' => array(
-         'user_id' => array('type' => 'int', 'size' => 'medium', 'not null' => TRUE, 'default' => 0, 'disp-width' => '8'),
-         'uid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0, 'disp-width' => '10')),
-    'primary key' => array('user_id'),
-  );
-  return $schema;
+function phpbb2drupal_disable() {
+  variable_del('phpbb2drupal_text_format');
+  variable_del('phpbb2drupal_db_prefix');
+  variable_del('phpbb2drupal_db_local');
+  variable_del('phpbb2drupal_db_driver');
+  variable_del('phpbb2drupal_db_host');
+  variable_del('phpbb2drupal_db_dbname');
+  variable_del('phpbb2drupal_db_username');
+  variable_del('phpbb2drupal_db_password');
+  variable_del('phpbb2drupal_files_domain');
+  variable_del('phpbb2drupal_files_directory');
+  PhpbbConfig::deregisterMigrations('phpbb2drupal');
 }

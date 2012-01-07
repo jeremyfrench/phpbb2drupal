@@ -1,24 +1,9 @@
 <?php
 /**
  * @file
- * Install, update and uninstall functions for the phpbb2drupal module.
- *
+ * Disables the PM migration if this module is disabled or removed
  */
 
-function phpbb2privatemsg_schema() {
-  $schema['phpbb2privatemsg'] = array(
-    'description' => t('Maps phpBB forum forum_id to Drupal taxonomy tid.'),
-    'fields' => array(
-      'mid' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'small', 'not null' => TRUE, 'default' => 0),
-      'thread_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'small', 'not null' => TRUE, 'default' => 0),
-      'msg_id' => array('type' => 'int', 'unsigned' => TRUE, 'size' => 'small', 'not null' => TRUE, 'default' => 0),
-    ),
-    'primary key' => array('mid'),
-  );
-
-  return $schema;
-}
-
-function phpbb2privatemsg_uninstall() {
-  variable_del('phpbb2privatemsg_import_successful');
+function phpbb2drupal_privatemsg_disable() {
+  PhpbbConfig::deregisterMigrations('phpbb2drupal_privatemsg');
 }

@@ -1,0 +1,8 @@
+name = "Migrate PHPBB Blog Mod"
+description = "Migrate PHPBB Blog Mod to D7."
+package = "phpBB to Drupal"
+core = 7.x
+dependencies[] = blog
+dependencies[] = phpbb2drupal
+files[] = phpbb2drupal.inc
+files[] = phpbb2drupal_blog.inc

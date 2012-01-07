@@ -1,6 +1,7 @@
-name = phpBB2Drupal
+name = Migrate core phpBB
 description = "Migrate your phpBB data into a Drupal forum."
 core = 7.x
+dependencies[] = migrate_ui
 dependencies[] = bbcode
 dependencies[] = comment
 dependencies[] = forum
@@ -9,3 +10,5 @@ dependencies[] = profile
 dependencies[] = taxonomy
 dependencies[] = user
 package = phpBB to Drupal
+files[] = phpbb2drupal.inc
+files[] = phpbb2drupal_core.inc

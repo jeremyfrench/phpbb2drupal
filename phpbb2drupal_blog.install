@@ -1,0 +1,9 @@
+<?php
+/**
+ * @file
+ * Disables the blog migration if this module is disabled or removed
+ */
+
+function phpbb2drupal_blog_disable() {
+  PhpbbConfig::deregisterMigrations('phpbb2drupal_blog');
+}
