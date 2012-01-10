@@ -307,40 +307,43 @@ class PhpbbTopicMigration extends PhpbbMigration {
     $this->description = t('Migrate individual forum topics from phpbb.');
     $this->dependencies = array('PhpbbUser', 'PhpbbForums');
 
-    $query = Database::getConnection('default', 'phpbb')->select('{topics}', 't');
-    $query->leftJoin('{posts}', 'p', 'topic_first_post_id = post_id');
-    $query->addField('t', 'topic_id');
+    $query = Database::getConnection('default', 'phpbb')->select('{posts}', 'p');
+    $query->leftJoin('{topics}', 't', 'p.topic_id = t.topic_id');
     $this->source = new MigrateSourceSQL(
       $query->fields('p', array(
-        'forum_id', 'poster_id', 'poster_ip',
+        'forum_id', 'post_id', 'poster_id', //'poster_ip',
         'post_time', 'post_edit_time', 'post_approved',
         'post_subject', 'post_text', 'bbcode_uid'
       ))
       ->condition('post_approved', 1)
+      ->where('p.post_id = t.topic_first_post_id')
+      ->orderBy('post_time')
     );
-
+    
     $this->destination = new MigrateDestinationNode('forum',
       array('text_format' => $this->importFormat)
     );
 
     $this->map = new MigrateSQLMap($this->machineName,
       array(
-        'topic_id' => array(
+        'post_id' => array(
           'type' => 'int',
           'unsigned' => TRUE,
           'not null' => TRUE,
-          'alias' => 't'
+          'alias' => 'p'
         )
       ),
       MigrateDestinationNode::getKeySchema(), 'phpbb'
     );
 
+    // Put NULL in here due to error http://drupal.org/node/839770
+    $this->addFieldMapping('nid')->defaultValue(NULL);
     $this->addFieldMapping('uid', 'poster_id')
       ->sourceMigration('PhpbbUser')->defaultValue(1);
     $this->addFieldMapping('taxonomy_forums', 'forum_id')
       ->sourceMigration('PhpbbForums')
       ->arguments(array('source_type' => 'tid'));
-    $this->addFieldMapping('hostname', 'poster_ip');
+//    $this->addFieldMapping('hostname', 'poster_ip');
     $this->addFieldMapping('status', 'post_approved');
     $this->addFieldMapping('title', 'post_subject');
     $this->addFieldMapping('body', 'post_text');
@@ -352,7 +355,7 @@ class PhpbbTopicMigration extends PhpbbMigration {
 
     // Unmapped destination fields
     $this->addUnmigratedDestinations(array(
-      'is_new', 'revision', 'revision_uid', 'promote', 'sticky', 'comment', 'path'
+      'is_new', 'revision', 'revision_uid', 'promote', 'sticky', 'comment', 'path', 'pathauto'
     ));
   }
 
@@ -378,15 +381,15 @@ class PhpbbPostMigration extends PhpbbMigration {
 
     $query = Database::getConnection('default', 'phpbb')->select('{posts}', 'p');
     $query->leftJoin('{topics}', 't', 'p.topic_id = t.topic_id');
+    $query->addField('t', 'topic_first_post_id');
     $this->source = new MigrateSourceSQL(
       $query->fields('p', array(
-        'post_id', 'topic_id', 'poster_id', 'poster_ip',
+        'post_id', 'poster_id', 'poster_ip',
         'post_time', 'post_edit_time', 'post_approved',
         'post_subject', 'post_text', 'bbcode_uid'
       ))
       ->condition('post_approved', 1)
-// TODO: Find out why we're duplicating the topic first post
-      ->condition('p.post_id', 't.topic_first_post_id', '<>')
+      ->where('p.post_id <> t.topic_first_post_id')
       ->orderBy('post_time')
     );
 
@@ -403,7 +406,7 @@ class PhpbbPostMigration extends PhpbbMigration {
 
     $this->addFieldMapping('uid', 'poster_id')
       ->sourceMigration('PhpbbUser')->defaultValue(1);
-    $this->addFieldMapping('nid', 'topic_id')
+    $this->addFieldMapping('nid', 'topic_first_post_id')
       ->sourceMigration('PhpbbTopic');
     $this->addFieldMapping('hostname', 'poster_ip');
     $this->addFieldMapping('status', 'post_approved');
