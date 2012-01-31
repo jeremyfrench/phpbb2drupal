@@ -106,7 +106,7 @@ class PhpbbUserMigration extends PhpbbMigration {
     if (!empty($user->user_yim)   ) array_push($im_contacts, 'Yahoo: ' . $user->user_yim);
     if (!empty($user->user_msnm)  ) array_push($im_contacts, 'MSNM: ' . $user->user_msnm);
     if (!empty($user->user_jabber)) array_push($im_contacts, 'Jabber: ' . $user->user_jabber);
-    $user->user_im = count($im_contacts) ? implode(PHPBB_IM_SEPARATOR, $im_contacts) : NULL;
+    $user->user_im = count($im_contacts) ? implode(PHPBB_LIST_SEPARATOR, $im_contacts) : NULL;
 
     $user->user_timezone = $user->user_timezone * 60 * 60; # Drupal stores timezones in seconds
 
