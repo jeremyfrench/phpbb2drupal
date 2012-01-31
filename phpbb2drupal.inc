@@ -41,6 +41,16 @@ abstract class PhpbbMigration extends DynamicMigration {
  */
 class PhpbbContentHelpers {
   /**
+   * Strip the BBCode UID from the string
+   *
+   * @param unknown_type $text The source text to be changed
+   * @param unknown_type $uid The BBCode UId to remove
+   */
+  static function stripUid($text, $uid) {
+    return preg_replace("/(:[a-z])?:$uid\]/", ']', $text);
+  }
+
+  /**
    * Strips text of extra phpbb markup and if requested, also strips all bbcode from text.
    */
   static function stripBbcode($text) {

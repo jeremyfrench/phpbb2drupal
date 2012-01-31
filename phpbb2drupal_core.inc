@@ -112,7 +112,7 @@ class PhpbbUserMigration extends PhpbbMigration {
 
     // remove the :bbcode_uid from signature
     if (!empty($user->user_sig)) {
-      $user->user_sig = preg_replace("/:$user->user_sig_bbcode_uid/", '', $user->user_sig);
+      $user->user_sig = PhpbbContentHelpers::stripUid($user->user_sig, $user->user_sig_bbcode_uid);
     }
     $user->user_sig = PhpbbContentHelpers::textSanitise(PhpbbContentHelpers::stripBbcode($user->user_sig));
 
@@ -362,7 +362,7 @@ class PhpbbTopicMigration extends PhpbbMigration {
   function prepareRow($post) {
     // remove the :bbcode_uid from post_text
     if (!empty($post->bbcode_uid)) {
-      $post->post_text = preg_replace("/:$post->bbcode_uid/", '', $post->post_text);
+      $post->post_text = PhpbbContentHelpers::stripUid($post->post_text, $post->bbcode_uid);
     }
     $post->post_text = PhpbbContentHelpers::stripBbcode($post->post_text);
     $post->post_text = PhpbbContentHelpers::textSanitise($post->post_text);
@@ -427,7 +427,7 @@ class PhpbbPostMigration extends PhpbbMigration {
   function prepareRow($post) {
     // remove the :bbcode_uid from post_text
     if (!empty($post->bbcode_uid)) {
-      $post->post_text = preg_replace("/:$post->bbcode_uid/", '', $post->post_text);
+      $post->post_text = PhpbbContentHelpers::stripUid($post->post_text, $post->bbcode_uid);
     }
     $post->post_text = PhpbbContentHelpers::stripBbcode($post->post_text);
     $post->post_text = PhpbbContentHelpers::textSanitise($post->post_text);
