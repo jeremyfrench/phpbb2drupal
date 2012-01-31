@@ -440,23 +440,22 @@ class PhpbbPostMigration extends PhpbbMigration {
  */
 class PhpbbAttachmentMigration extends PhpbbMigration {
   // TODO: Automatically rename the files on disk before starting. Currently done by drush command.
+
+  /**
+   * Are we using the media module?
+   */
+  private $media = FALSE;
+
   public function __construct() {
     parent::__construct();
     $this->description = t('Migrate all phpbb attachments to a file field on the relavant D7 entity.');
 
-    $this->dependencies = array('PhpbbPost');
-
-    $this->map = new MigrateSQLMap($this->machineName,
-      array(
-        'attach_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
-      ),
-      MigrateDestinationFile::getKeySchema(), 'phpbb'
-    );
+    $this->dependencies = array('PhpbbPost', 'PhpbbUser');
 
     $query = Database::getConnection('default', 'phpbb')
       ->select('{attachments}', 'a')
       ->fields('a', array(
-        'attach_id', 'post_msg_id', 'topic_id', 'poster_id',
+        'attach_id', 'post_msg_id', 'poster_id',
         'real_filename', //'physical_filename',
         'attach_comment', 'filetime'));
 
@@ -465,21 +464,37 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
 
     $this->source = new MigrateSourceSQL($query);
 
-// TODO: Strip full phpbb path from the filename so files are copied into attachments directory
-    $this->destination = new MigrateDestinationFile(array(
-      'copy_file' => TRUE,
+    $dest_options = array('copy_file' => TRUE);
+    // Make use of the media module if present
+    if (module_exists('media') && module_exists('migrate_extras')) {
+      $this->media = TRUE;
+//      $dest_options['source_migrations'] = $this->dependencies;
+      $this->destination = new MigrateDestinationMedia('image', $dest_options);
+      $keySchema = MigrateDestinationMedia::getKeySchema();
+      $this->addFieldMapping(NULL, 'attach_comment');
+    } else {
+      // TODO: Strip full phpbb path from the filename so files are copied into attachments directory
       // TODO: Get this directory from the Attachments field settings
-      'copy_destination' => file_build_uri('attachments') . '/'
-    ));
+      $dest_options['copy_destination'] = file_build_uri('attachments') . '/';
+      $this->destination = new MigrateDestinationFile($dest_options);
+      $keySchema = MigrateDestinationFile::getKeySchema();
+      $this->addFieldMapping('description', 'attach_comment');
+      $this->addFieldMapping('display')->defaultValue(1);
+    }
 
+    $this->map = new MigrateSQLMap($this->machineName,
+      array(
+        'attach_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
+      ),
+      $keySchema, 'phpbb'
+    );
+    
     // Just map the incoming URL to the destination's 'uri'
     $this->addFieldMapping('uri', 'real_filename');
     $this->addFieldMapping('uid', 'poster_id')->sourceMigration('PhpbbUser');
     $this->addFieldMapping('timestamp', 'filetime');
-    $this->addFieldMapping('description', 'attach_comment');
-    $this->addFieldMapping('display')->defaultValue(1);
-    $this->addFieldMapping('topic_id', 'topic_id')->sourceMigration('PhpbbTopic');
-    $this->addFieldMapping('post_id', 'post_msg_id')->sourceMigration('PhpbbPost');
+    $this->addFieldMapping('topic_id', 'post_msg_id')->sourceMigration('PhpbbTopic')->issueGroup(t('DNM'));
+    $this->addFieldMapping('comment_id', 'post_msg_id')->sourceMigration('PhpbbPost')->issueGroup(t('DNM'));
     $this->addFieldMapping(NULL, 'topic_first_post_id')->issueGroup(t('DNM'));
 
     // Unmapped destination fields
@@ -500,6 +515,80 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
    * associate it with the appropriate node
    */
   public function complete($file, stdClass $row) {
+      // Pick only MIME types that media supports
+      $mediaMime = FALSE;
+      switch (substr($file->filemime, 0, 5)) {
+      case "image":
+      case "audio":
+      case "video":
+        $mediaMime = TRUE;
+        break;
+      default:
+        $mediaMime = FALSE;
+        break;
+      }
+
+      if ($mediaMime && $this->media) {
+        $this->completeMedia($file, $row);
+      } else {
+        $this->completeField($file, $row);
+      }
+  }
+
+  /**
+   * Replace the attachment tag for this file with the [media] tag.
+   * If no matches are found, append tag to field.
+   * 
+   * @param $field The field to search
+   * @param $filename The file name to search for
+   * @param $tag The media tag to replace any matches with
+   * 
+   */
+  public function replaceContent($field, $filename, $tag) {
+      $count = 0;
+      // [attachment=1:1e5rw1bo]<!-- ia1 -->P7.jpg<!-- ia1 -->[/attachment:1e5rw1bo]
+      // [literal=id:bbcode_uid]comment $filename close[/literal:bbcode_uid]
+      // BBCode UIDs will have already been stripped, leaving us:
+      // [attachment=x]$filename[/attachment]
+      $pattern = '/\[attachment=\d+\]' . basename($filename) . '\[\/attachment\]/';
+
+      // We should only find one match so limit to 1 replacement
+      $result = preg_replace($pattern, $tag, $field, 1, &$count);
+
+      // If no replacements were done, append tag to end of field
+      return $count ? $result : $field . "\n{$tag}";
+  }
+  
+  /**
+   * Add the new media entity to the body of it's orignal node.
+   * If it was inline, find the [attachment] tag, otherwise
+   * add the media tags to the end of the post.
+   */
+  public function completeMedia($media, stdClass $row) {
+    //  [[{"type":"media","view_mode":"media_large","fid":"101","attributes":{"alt":"","class":"media-image","typeof":"foaf:Image"}}]]
+    $newTag = '[[{"type":"media","view_mode":"media_large","fid":"'
+      . $media->fid
+      . '","attributes":{"alt":"","class":"media-image","typeof":"foaf:Image"}}]]';
+    if ($row->topic_first_post_id == $row->post_msg_id) {
+      $topic = node_load($this->destinationValues->topic_id);
+      $topic->body[LANGUAGE_NONE][0]['value'] = $this->replaceContent(
+        $topic->body[LANGUAGE_NONE][0]['value'], $row->real_filename, $newTag
+      );
+      node_submit($topic);
+      node_save($topic);
+    } else {
+      $post = comment_load($this->destinationValues->comment_id);
+      $post->comment_body[LANGUAGE_NONE][0]['value'] = $this->replaceContent(
+        $post->comment_body[LANGUAGE_NONE][0]['value'], $row->real_filename, $newTag
+      );
+      comment_submit($post);
+      comment_save($post);
+    }
+  }
+  /**
+   * Associate new attachment with it's forum post
+   */
+  public function completeField($file, stdClass $row) {
     $i = 0;
     $file->display = 1;
     $file->description = $row->attach_comment;
@@ -517,7 +606,7 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
     }
     else {
       // It's a comment
-      $post = comment_load($this->destinationValues->post_id);
+      $post = comment_load($this->destinationValues->comment_id);
       field_attach_load('comment_node_forum', array($post));
       if (count($post->field_attach)) {
         $i = count($post->field_attach[LANGUAGE_NONE]);
