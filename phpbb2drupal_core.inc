@@ -315,6 +315,7 @@ class PhpbbTopicMigration extends PhpbbMigration {
         'post_time', 'post_edit_time', 'post_approved',
         'post_subject', 'post_text', 'bbcode_uid'
       ))
+      ->fields('t',array('topic_views'))
       ->condition('post_approved', 1)
       ->where('p.post_id = t.topic_first_post_id')
       ->orderBy('post_time')
@@ -350,9 +351,10 @@ class PhpbbTopicMigration extends PhpbbMigration {
     $this->addFieldMapping('created', 'post_time');
     $this->addFieldMapping('changed', 'post_edit_time');
     $this->addFieldMapping('language')->defaultValue($this->defaultLanguage);
-
+    $this->addFieldMapping('totalcount','topic_views');
+    
     $this->addFieldMapping(NULL, 'bbcode_uid')->issueGroup(t('DNM')); // Used to santise body text
-
+    
     // Unmapped destination fields
     $this->addUnmigratedDestinations(array(
       'is_new', 'revision', 'revision_uid', 'promote', 'sticky', 'comment', 'path', 'pathauto'
