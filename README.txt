@@ -1,3 +1,7 @@
+THIS IS A CLONE OF 
+http://git.drupal.org/project/phpbb2drupal.git
+
+with some customizations and bugfixes in.
 
 INTRODUCTION
 ------------
