@@ -14,16 +14,58 @@ abstract class PhpbbMigration extends DynamicMigration {
 
   protected $importFormat;
   protected $defaultLanguage;
-
-  public function __construct() {
-    global $language;
+  protected $migration_settings;
+  
+  
+  /**
+   * Get a variable from the Phpbb config table, or NULL if not found.
+   * This requires the database connection to have already been created.
+   * @param $var
+   */
+  function getPhpbbDbVar($var) {
+   $ret = NULL;
+   try {
+    $result = Database::getConnection('default', $this->migration_settings['machine_name'])
+    ->select('{config}', 'c')
+    ->fields('c', array('config_value'))
+    ->condition('config_name', $var)
+    ->execute()
+    ->fetchAssoc();
+    if ($result) {
+     $ret = $result['config_value'];
+    }
+   }
+   catch (Exception $ex) {
+    // Assume an error means we won't find anything, so return the NULL
+   }
+   return $ret;
+  }
+  
+  
+  
+  /**
+   * Build a stream path for the request phpbb config variable
+   * Valid paths are: avatar, icons, ranks, smilies, upload
+   *
+   * @param $var The variable requested, without the _path suffix
+   * @return The complete URI of the requested path
+   */
+  function getPath($var) {
+   return $this->getVar('files_path') . $this->getVar("{$var}_path");
+  }
+  
+  // TODO: create method for classes with same settings to refere to each other.
+  
+  public function __construct($settings = array()) {
+    $this->migration_settings = $settings;
+    //TODO: so that each set of migrations is in it's own group.
     parent::__construct(MigrateGroup::getInstance('PhpBB'));
-
-    $this->importFormat = PhpbbConfig::getVar('text_format', '');
-    $this->defaultLanguage = $language->language;
+    $this->importFormat = $settings['text_format'];
+    $this->defaultLanguage = $settings['language'];
 
     $this->team = array(
-      new MigrateTeamMember('Martin Fraser', 'mdf@darksnow.net', t('Implementor'))
+      new MigrateTeamMember('Martin Fraser', 'mdf@darksnow.net', t('Implementor')),
+      new MigrateTeamMember('Jeremy French', 'jeremy@jeremyfrench.co.uk', t('i18n and multi import'))
     );
 
     // Individual mappings in a migration can be linked to a ticket or issue
@@ -32,7 +74,6 @@ abstract class PhpbbMigration extends DynamicMigration {
     // ->issueNumber(1234) to a mapping.
     $this->issuePattern = 'http://drupal.org/node/:id:';
 
-    PhpbbConfig::createConnection();
   }
 }
 
@@ -84,105 +125,18 @@ class PhpbbContentHelpers {
  * Class to simplify access to the configuration of PHPBB and this migration
  */
 class PhpbbConfig {
-  /**
-   * Get a variable from the Phpbb config table, or NULL if not found.
-   * This requires the database connection to have already been created.
-   * @param $var
-   */
-  static function getPhpbbDbVar($var) {
-    $ret = NULL;
-    try {
-      $result = Database::getConnection('default', 'phpbb')
-        ->select('{config}', 'c')
-        ->fields('c', array('config_value'))
-        ->condition('config_name', $var)
-        ->execute()
-        ->fetchAssoc();
-      if ($result) {
-        $ret = $result['config_value'];
-      }
-    }
-    catch (Exception $ex) {
-      // Assume an error means we won't find anything, so return the NULL
-    }
-    return $ret;
-  }
 
-  /**
-   * Get a configuration variable. If it's from the migration config, get it
-   * from system variables, otherwise get it from the phpbb config table
-   * @param $var The variable requested
-   * @param $def The default value to return if there's no match
-   */
-  static function getVar($var, $def = NULL) {
-    $ret = NULL;
-    switch ($var) {
-      case 'text_format':
-      case 'db_prefix':
-      case 'db_local':
-      case 'db_driver':
-      case 'db_host':
-      case 'db_dbname':
-      case 'db_username':
-      case 'db_password':
-      case 'files_domain':
-      case 'files_directory':
-        $ret = variable_get("phpbb2drupal_{$var}", $def);
-        break;
-      case 'files_path':
-        $ret = self::getVar('files_domain');
-        if ($ret == '') {
-          $ret = file_build_uri(self::getVar('files_directory'));
-        }
-        break;
-      default:
-        return self::getPhpbbDbVar($var);
-        break;
-    }
-    return $ret;
-  }
-
-  /**
-   * Build a stream path for the request phpbb config variable
-   * Valid paths are: avatar, icons, ranks, smilies, upload
-   *
-   * @param $var The variable requested, without the _path suffix
-   * @return The complete URI of the requested path
-   */
-  static function getPath($var) {
-    return self::getVar('files_path') . self::getVar("{$var}_path");
-  }
-
-  /**
-   * Get an array of database credentials compatible with
-   * Database::addConnectionInfo()
-   */
-  static function getDbCredentials() {
-    global $databases;
-    $con;
-    if (self::getVar('db_local', 1)) {
-      $con = $databases['default']['default'];
-    }
-    else {
-      $con = array(
-        'driver' => self::getVar('db_driver'),
-        'database' => self::getVar('db_dbname'),
-        'username' => self::getVar('db_username'),
-        'password' => self::getVar('db_password'),
-        'host' => self::getVar('db_host')
-      );
-    }
-    $con['prefix'] = self::getVar('db_prefix');
-    return $con;
-  }
 
   /**
    * Create a phpbb database connection if it's not already there.
    */
-  static function createConnection() {
+  static function createConnection($settings) {
     global $databases;
-    if (empty($databases['default']['phpbb'])) {
-      Database::addConnectionInfo('phpbb', 'default', PhpbbConfig::getDbCredentials());
+    if ($settings['db']['local']) {
+     $settings['db'] = $databases['default']['default'];
+    }
+    if (empty($databases['default'][$settings['machine_name']])) {
+      Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
     }
   }
 
@@ -190,10 +144,14 @@ class PhpbbConfig {
    * Register all migrations.
    * Call this AFTER the configuration has been done!
    */
-  static function registerMigrations() {
+  static function registerMigrations($settings) {
+   // Create machine name for settings
+   $settings['machine_name'] = preg_replace('/[^A-Za-z0-9]/', '_', $settings['name']) . '_' . $settings['language'];
+   self::createConnection($settings);
+   
     foreach (self::getMigrations() as $class => $mod) {
       if (module_exists($mod)) {
-        Migration::registerMigration("{$class}Migration", $class);
+        Migration::registerMigration("Phpbb{$class}Migration", 'phpbb_' . $settings['machine_name'] . '_' . $class, $settings);
       }
     }
   }
@@ -223,15 +181,17 @@ class PhpbbConfig {
    * Also provides a list of the sub modules that implement a given migration.
    */
   static function getMigrations() {
+   // Should make this alterable.
     return array(
-      'PhpbbAvatar' => 'phpbb2drupal',
-      'PhpbbForums' => 'phpbb2drupal',
-      'PhpbbUser' => 'phpbb2drupal',
-      'PhpbbTopic' => 'phpbb2drupal',
-      'PhpbbPost' => 'phpbb2drupal',
-      'PhpbbAttachment' => 'phpbb2drupal',
-      'PhpbbPrivateMessage' => 'phpbb2drupal_privatemsg',
-      'PhpbbBlog' => 'phpbb2drupal_blog',
+   // TODO: remove as teh classes are enabled.
+      'Avatar' => 'phpbb2drupal',
+   //   'Forums' => 'phpbb2drupal',
+      'User' => 'phpbb2drupal',
+   //   'Topic' => 'phpbb2drupal',
+   //   'Post' => 'phpbb2drupal',
+   //   'Attachment' => 'phpbb2drupal',
+   //   'PrivateMessage' => 'phpbb2drupal_privatemsg',
+   //   'Blog' => 'phpbb2drupal_blog',
       //'PhpbbBlogAttachment' => 'phpbb2drupal_blog',
     );
   }

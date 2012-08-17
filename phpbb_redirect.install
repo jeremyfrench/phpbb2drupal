@@ -1,0 +1,4 @@
+<?php
+//TODO: install schema for temp topic and temp thread with language code.
+
+//TODO: add a flag so that the imports know that the tables exsist and to populate them when doing an import.

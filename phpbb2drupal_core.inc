@@ -15,19 +15,30 @@ include_once('phpbb2drupal.inc');
  *  for every user. This is linked to an issue with profile and should be resolved soon.
  */
 class PhpbbUserMigration extends PhpbbMigration {
-  public function __construct() {
-    parent::__construct();
-    $this->description = t('Migrate phpbb users to Drupal users');
+  public function __construct($settings = array()) {
+    Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
+    $this->migration_settings = $settings;
+    parent::__construct($settings);
+    if(drupal_multilingual()) {
 
-    $this->dependencies = array('PhpbbAvatar');
+     $languages = language_list('enabled');
+     $languages = $languages[1];
+     $this_language = $languages[$settings['language']];
+     $this->description = t('Migrate phpbb users. From %source_name in %language_name',array('%source_name' => $settings['name'], '%language_name' => $this_language->name) );
+    }
+    else {
+      $this->description = t('Migrate phpbb users from %source_name',array('%source_name' => $settings['name'],));
+   }
+   $this->machineName = 'phpbb_' . $settings['machine_name'] . '_User';
+   //$this->dependencies = array('PhpbbAvatar');
 
     // Make sure Forums import appears first in the list even though we
     // can run the user import without the forums in place.
-    $this->softDependencies = array('PhpbbForums');
+    //$this->softDependencies = array('PhpbbForums');
 
     // Select everything from the phpbb users table
     $this->source = new MigrateSourceSQL(
-      Database::getConnection('default', 'phpbb')
+      Database::getConnection('default', $settings['machine_name'])
         ->select('{users}', 'u')->fields('u', array(
          'user_id', 'user_type', 'username', 'user_password', 'user_email', 'user_sig', 'user_sig_bbcode_uid',
          'user_regdate', 'user_lastvisit', 'user_inactive_reason',
@@ -47,7 +58,7 @@ class PhpbbUserMigration extends PhpbbMigration {
       array(
         'user_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
       ),
-      MigrateDestinationUser::getKeySchema(),  'phpbb'
+      MigrateDestinationUser::getKeySchema(),  $settings['machine_name']
     );
 
     $this->addFieldMapping('name', 'username');
@@ -80,7 +91,7 @@ class PhpbbUserMigration extends PhpbbMigration {
     $this->addFieldMapping(NULL, 'user_jabber')->issueGroup(t('DNM'));
     $this->addFieldMapping('user_im', 'user_im')->separator(PHPBB_LIST_SEPARATOR);
 
-    $this->addFieldMapping('picture', 'user_avatar')->sourceMigration('PhpbbAvatar');
+   // TODO: FIX $this->addFieldMapping('picture', 'user_avatar')->sourceMigration('PhpbbAvatar');
 
     // Unmapped destination fields
     $this->addUnmigratedDestinations(array(
@@ -142,10 +153,21 @@ class PhpbbUserMigration extends PhpbbMigration {
  * Import forum user avatars from phpbb to core picture field
  */
 class PhpbbAvatarMigration extends PhpbbMigration {
-  public function __construct() {
-    parent::__construct();
-    $this->description = t('Migrate user avatars from phpbb.');
-
+  public function __construct($settings) {
+   Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
+   parent::__construct($settings);
+   if(drupal_multilingual()) {
+   
+    $languages = language_list('enabled');
+    $languages = $languages[1];
+    $this_language = $languages[$settings['language']];
+    $this->description = t('Migrate phpbb avatars. From %source_name in %language_name',array('%source_name' => $settings['name'], '%language_name' => $this_language->name) );
+   }
+   else {
+    $this->description = t('Migrate phpbb avatars from %source_name',array('%source_name' => $settings['name'],));
+   }
+   $this->machineName = 'phpbb_' . $settings['machine_name'] . '_Avatar';
+    
     $this->map = new MigrateSQLMap($this->machineName,
       array('user_avatar' => array(
             'type' => 'varchar',
@@ -154,10 +176,10 @@ class PhpbbAvatarMigration extends PhpbbMigration {
             'description' => 'Avatar File Name.'
         )
       ),
-      MigrateDestinationFile::getKeySchema(), 'phpbb'
+      MigrateDestinationFile::getKeySchema(),  $settings['machine_name']
     );
 
-    $query = Database::getConnection('default', 'phpbb')
+    $query = Database::getConnection('default', $settings['machine_name'])
       ->select('{users}', 'u')
       ->fields('u', array('user_avatar'))
       ->isNotNull('user_avatar')
@@ -187,15 +209,15 @@ class PhpbbAvatarMigration extends PhpbbMigration {
    */
   public function prepareRow($avatar) {
     if (!empty($avatar->user_avatar)) {
-      $avatar->user_avatar = self::getRealFilename($avatar->user_avatar);
+      $avatar->user_avatar = $this->getRealFilename($avatar->user_avatar);
     }
   }
 
-  static public function getRealFilename($dbName) {
+  public function getRealFilename($dbName) {
     $name = pathinfo($dbName);
     $pos = strpos($name['basename'], '_');
 
-    $filename = PhpbbConfig::getPath('avatar') . '/' . PhpbbConfig::getVar('avatar_salt') . '_'
+    $filename = $this->getPath('avatar') . '/' . $this->getVar('avatar_salt') . '_'
       . drupal_substr($name['basename'], 0, $pos) . '.' . $name['extension'];
 
     // The rest of the db_name is actually the timestamp and can be got like this

@@ -3,6 +3,20 @@ http://git.drupal.org/project/phpbb2drupal.git
 
 with some customizations and bugfixes in.
 
+TODO (for jeremyfrench) post holiday 
+
+1: The migration elements with shared settings need to be able to talk to each other, the machine names can be generated via a function in phpbbmigrate object. 
+
+2: phpBBconfig::getMigrations() needs a drupal alter so that other modules can define overrides. We need to implement this with the alfresco_p2d module, so that the user class we use can work insead, this needs to respect having $settings passed to it and to the parent __construct method.
+
+3. The other classes in php2bb need to be altered to reflect the new framework. 
+
+4. Need to save with language code correct (may work out of the box to a certain extent)
+
+5. Need to work on merging user details when they are in multiple languages.
+
+6. Need to fix the phpbb2drupal redirect module so it a: works and b: works with multiple languages.
+
 INTRODUCTION
 ------------
 phpbb2drupal allows the migration of a phpbb installation to Drupal. The core

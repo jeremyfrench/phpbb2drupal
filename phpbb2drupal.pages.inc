@@ -18,7 +18,8 @@ function phpbb2drupal_configure() {
  * Form for configuring phpbb migrations.
  */
 function phpbb2drupal_configure_form($form, &$form_state) {
-
+ //TODO: show languages already set up. Allow selection editing and deletion.
+ 
   $form['overview'] = array(
     '#prefix' => '<div>',
     '#markup' => t('The import of phpbb forums into Drupal can be configured using
@@ -30,7 +31,38 @@ function phpbb2drupal_configure_form($form, &$form_state) {
       Drupal database and all files should have been copied into public storage.'),
     '#suffix' => '</div>',
   );
-
+  
+  $form['phpbb2drupal_import_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name'),
+    '#required' => TRUE,
+    '#description' => t('It is possible to import from multiple PHPBB sources, enter a name here to identify this patuclar source')
+    );
+  
+  if(drupal_multilingual()) {
+   $languages = language_list('enabled');
+   $languages = $languages[1];
+   $names = array('UND' => 'undefined');
+   foreach ($languages as $langcode => $item) {
+    $name = t($item->name);
+    $names[$langcode] = $name . ($item->native != $name ? ' (' . $item->native . ')' : '');
+   }
+   
+   $form['phpbb2drupal_language'] = array(
+     '#type' => 'select',
+     '#title' => t('Language'),
+     '#required' => TRUE,
+     '#options' =>  $names,
+     '#description' => t('Enter the language of the phpBB content here, if it is mixed or unxnkown use \'UND\'')
+   );
+  }
+  else {
+   $form['language_note'] = array(
+     '#prefix' => '<div>',
+     '#markup' => t('To Import in multple languages you need to turn on the  \'locale\' module and add languages'),
+     '#suffix' => '</div>',
+   );
+  }
   // Select default text format for bodies etc.
   $options = array();
   foreach (filter_formats() as $format_id => $format) {
@@ -199,18 +231,23 @@ function phpbb2drupal_configure_form_validate($form, &$form_state) {
  * Submit callback for the phpbb configure form.
  */
 function phpbb2drupal_configure_form_submit($form, &$form_state) {
-  variable_set('phpbb2drupal_text_format', $form_state['values']['phpbb2drupal_text_format']);
-  variable_set('phpbb2drupal_db_prefix', $form_state['values']['phpbb2drupal_db_prefix']);
-  variable_set('phpbb2drupal_db_local', $form_state['values']['phpbb2drupal_db_local']);
-  variable_set('phpbb2drupal_db_driver', $form_state['values']['phpbb2drupal_db_driver']);
-  variable_set('phpbb2drupal_db_host', $form_state['values']['phpbb2drupal_db_host']);
-  variable_set('phpbb2drupal_db_dbname', $form_state['values']['phpbb2drupal_db_dbname']);
-  variable_set('phpbb2drupal_db_username', $form_state['values']['phpbb2drupal_db_username']);
-  variable_set('phpbb2drupal_files_domain', $form_state['values']['phpbb2drupal_files_domain']);
-  variable_set('phpbb2drupal_files_directory', $form_state['values']['phpbb2drupal_files_directory']);
+ // TODO: add variables to the registerMigrations raither than setting variables.
+  // name phpbb2drupal_CUSTOM NAME_import name
+   $settings['name'] = $form_state['values']['phpbb2drupal_import_name'];
+   $settings['language'] = $form_state['values']['phpbb2drupal_language'];
+   $settings['text_format']= $form_state['values']['phpbb2drupal_text_format'];
+    
+   $settings['db']['prefix'] = $form_state['values']['phpbb2drupal_db_prefix'];
+   $settings['db']['local'] = $form_state['values']['phpbb2drupal_db_local'];
+   $settings['db']['driver'] = $form_state['values']['phpbb2drupal_db_driver'];
+   $settings['db']['host'] = $form_state['values']['phpbb2drupal_db_host'];
+   $settings['db']['database'] = $form_state['values']['phpbb2drupal_db_dbname'];
+   $settings['db']['username'] = $form_state['values']['phpbb2drupal_db_username'];
+   $settings['files']['domain'] = $form_state['values']['phpbb2drupal_files_domain'];
+   $settings['files']['directory'] = $form_state['values']['phpbb2drupal_files_directory'];
   if ($form_state['values']['phpbb2drupal_db_password']) {
-    variable_set('phpbb2drupal_db_password', $form_state['values']['phpbb2drupal_db_password']);
+    $settings['db']['password'] = $form_state['values']['phpbb2drupal_db_password'];
   }
-  PhpbbConfig::registerMigrations();
+  PhpbbConfig::registerMigrations($settings);
   drupal_set_message(t('PHPBB configuration changes saved.'));
 }
