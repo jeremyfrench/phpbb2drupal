@@ -340,7 +340,9 @@ class PhpbbTopicMigration extends PhpbbMigration {
         'post_time', 'post_edit_time', 'post_approved',
         'post_subject', 'post_text', 'bbcode_uid'
       ))
+
       ->fields('t',array('topic_views'))
+      ->fields('t', array('topic_type'))
       ->condition('post_approved', 1)
       ->where('p.post_id = t.topic_first_post_id')
       ->orderBy('post_time')
@@ -377,7 +379,7 @@ class PhpbbTopicMigration extends PhpbbMigration {
     $this->addFieldMapping('changed', 'post_edit_time');
     $this->addFieldMapping('language')->defaultValue($this->defaultLanguage);
     $this->addFieldMapping('totalcount','topic_views');
-    
+    $this->addFieldMapping('sticky', 'topic_type');
     $this->addFieldMapping(NULL, 'bbcode_uid')->issueGroup(t('DNM')); // Used to santise body text
     
     // Unmapped destination fields
@@ -394,6 +396,8 @@ class PhpbbTopicMigration extends PhpbbMigration {
     $post->post_text = PhpbbContentHelpers::stripBbcode($post->post_text);
     $post->post_text = PhpbbContentHelpers::textSanitise($post->post_text);
     $post->post_subject = PhpbbContentHelpers::textSanitise($post->post_subject);
+    
+    $post->topic_type = ($post->topic_type > 0) ? 1 : 0;
   }
 }
 
