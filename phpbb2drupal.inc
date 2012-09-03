@@ -15,7 +15,7 @@ abstract class PhpbbMigration extends DynamicMigration {
   protected $importFormat;
   protected $defaultLanguage;
   protected $migration_settings;
-  
+  static $phpbb_type = NULL;
   
   /**
    * Get a variable from the Phpbb config table, or NULL if not found.
@@ -57,9 +57,14 @@ abstract class PhpbbMigration extends DynamicMigration {
   // TODO: create method for classes with same settings to refere to each other.
   
   public function __construct($settings = array()) {
+    $called_class = get_called_class();
+    
+    Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
     $this->migration_settings = $settings;
     //TODO: so that each set of migrations is in it's own group.
     parent::__construct(MigrateGroup::getInstance('PhpBB'));
+    $this->machineName = $this->getMigrationName($called_class::$phpbb_type);
+    
     $this->importFormat = $settings['text_format'];
     $this->defaultLanguage = $settings['language'];
 
@@ -74,6 +79,16 @@ abstract class PhpbbMigration extends DynamicMigration {
     // ->issueNumber(1234) to a mapping.
     $this->issuePattern = 'http://drupal.org/node/:id:';
 
+  }
+  /**
+   * Migrations which are part of the same set will have common names, this is a function for 
+   * them to be able to generate their common names and reference each other for dependancies 
+   * etc.
+   * 
+   * @param string $base_name the base type of the name for example user or privatemsg
+   */
+  protected function getMigrationName($base_name) {
+    return 'phpbb_' . $this->migration_settings['machine_name'] . '_' . $base_name;
   }
 }
 
@@ -147,11 +162,10 @@ class PhpbbConfig {
   static function registerMigrations($settings) {
    // Create machine name for settings
    $settings['machine_name'] = preg_replace('/[^A-Za-z0-9]/', '_', $settings['name']) . '_' . $settings['language'];
-   self::createConnection($settings);
-   
-    foreach (self::getMigrations() as $class => $mod) {
+   foreach (self::getMigrations() as $class => $mod) {
       if (module_exists($mod)) {
-        Migration::registerMigration("Phpbb{$class}Migration", 'phpbb_' . $settings['machine_name'] . '_' . $class, $settings);
+        $type = $class::$phpbb_type;
+        Migration::registerMigration($class, 'phpbb_' . $settings['machine_name'] . '_' . $type, $settings);
       }
     }
   }
@@ -181,18 +195,19 @@ class PhpbbConfig {
    * Also provides a list of the sub modules that implement a given migration.
    */
   static function getMigrations() {
-   // Should make this alterable.
-    return array(
-   // TODO: remove as teh classes are enabled.
-      'Avatar' => 'phpbb2drupal',
-   //   'Forums' => 'phpbb2drupal',
-      'User' => 'phpbb2drupal',
-   //   'Topic' => 'phpbb2drupal',
-   //   'Post' => 'phpbb2drupal',
-   //   'Attachment' => 'phpbb2drupal',
-   //   'PrivateMessage' => 'phpbb2drupal_privatemsg',
-   //   'Blog' => 'phpbb2drupal_blog',
-      //'PhpbbBlogAttachment' => 'phpbb2drupal_blog',
+   $migrations = array(
+      'PhpbbAvatarMigration' => 'phpbb2drupal',
+      'PhpbbForumsMigration' => 'phpbb2drupal',
+      'PhpbbUserMigration' => 'phpbb2drupal',
+      'PhpbbTopicMigration' => 'phpbb2drupal',
+      'PhpbbPostMigration' => 'phpbb2drupal',
+      'PhpbbAttachmentMigration' => 'phpbb2drupal',
+      'PhpbbPrivateMessageMigration' => 'phpbb2drupal_privatemsg',
+      //'PhpbbBlogMigration' => 'phpbb2drupal_blog',
+      //'PhpbbBlogAttachmentMigration' => 'phpbb2drupal_blog',
     );
+   drupal_alter('phpbbmigrations', $migrations);
+   return $migrations;
+   
   }
 }

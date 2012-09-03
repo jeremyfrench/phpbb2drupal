@@ -8,13 +8,14 @@
  * Import PHPBB private messages into the Drupal privatemsg system
  */
 class PhpbbPrivateMessageMigration extends PhpbbMigration {
-  public function __construct() {
-    parent::__construct();
+  static $phpbb_type = 'PrivateMessage'; 
+  public function __construct($settings = array()) {
+    parent::__construct($settings);
     $this->description = t('Migrate private messages to the privatemsg module.');
-    $this->dependencies = array('PhpbbUser');
+    $this->dependencies = array($this->getMigrationName('User'));
 
     $this->source = new MigrateSourceSQL(
-      Database::getConnection('default', 'phpbb')
+      Database::getConnection('default', $settings['machine_name'])
       ->select('{privmsgs}', 'p')
       ->fields('p', array(
         'msg_id', 'author_id', 'message_time',
@@ -33,7 +34,7 @@ class PhpbbPrivateMessageMigration extends PhpbbMigration {
       array(
         'msg_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
       ),
-      MigrateDestinationPrivateMsg::getKeySchema(), 'phpbb'
+      MigrateDestinationPrivateMsg::getKeySchema(), $settings['machine_name']
     );
 
     $this->addFieldMapping('subject', 'message_subject');
@@ -41,10 +42,10 @@ class PhpbbPrivateMessageMigration extends PhpbbMigration {
     $this->addFieldMapping('format')->defaultValue($this->importFormat);
     $this->addFieldMapping('recipients', 'to_address')
       ->separator(PHPBB_LIST_SEPARATOR)
-      ->sourceMigration('PhpbbUser');
+      ->sourceMigration($this->getMigrationName('User'));
     $this->addFieldMapping('timestamp', 'message_time');
     $this->addFieldMapping('author', 'author_id')
-      ->sourceMigration('PhpbbUser')->defaultValue(1);
+      ->sourceMigration($this->getMigrationName('User'))->defaultValue(1);
     $this->addFieldMapping('is_new')->defaultValue(1);
 
     $this->addFieldMapping(NULL, 'bbcode_uid')->issueGroup(t('DNM')); // Used to santise body text
@@ -56,7 +57,7 @@ class PhpbbPrivateMessageMigration extends PhpbbMigration {
   function prepareRow($message) {
     // Populate to_address with all recipients of this message
     $recipients = array();
-    $query = Database::getConnection('default', 'phpbb')
+    $query = Database::getConnection('default', $this->migration_settings['machine_name'])
       ->select('{privmsgs_to}', 'pt')
       ->fields('pt', array('user_id'))
       ->condition('msg_id', $message->msg_id);

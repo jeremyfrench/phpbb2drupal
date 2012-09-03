@@ -15,9 +15,10 @@ include_once('phpbb2drupal.inc');
  *  for every user. This is linked to an issue with profile and should be resolved soon.
  */
 class PhpbbUserMigration extends PhpbbMigration {
+  static $phpbb_type = 'User'; 
+ 
   public function __construct($settings = array()) {
     Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
-    $this->migration_settings = $settings;
     parent::__construct($settings);
     if(drupal_multilingual()) {
 
@@ -29,12 +30,12 @@ class PhpbbUserMigration extends PhpbbMigration {
     else {
       $this->description = t('Migrate phpbb users from %source_name',array('%source_name' => $settings['name'],));
    }
-   $this->machineName = 'phpbb_' . $settings['machine_name'] . '_User';
-   //$this->dependencies = array('PhpbbAvatar');
+  
+   $this->dependencies = array($this->getMigrationName('Avatar'));
 
-    // Make sure Forums import appears first in the list even though we
-    // can run the user import without the forums in place.
-    //$this->softDependencies = array('PhpbbForums');
+   // Make sure Forums import appears first in the list even though we
+   // can run the user import without the forums in place.
+   //$this->softDependencies = array($this->getMigrationName('Forums'));
 
     // Select everything from the phpbb users table
     $this->source = new MigrateSourceSQL(
@@ -91,7 +92,7 @@ class PhpbbUserMigration extends PhpbbMigration {
     $this->addFieldMapping(NULL, 'user_jabber')->issueGroup(t('DNM'));
     $this->addFieldMapping('user_im', 'user_im')->separator(PHPBB_LIST_SEPARATOR);
 
-   // TODO: FIX $this->addFieldMapping('picture', 'user_avatar')->sourceMigration('PhpbbAvatar');
+    $this->addFieldMapping('picture', 'user_avatar')->sourceMigration($this->getMigrationName('Avatar'));
 
     // Unmapped destination fields
     $this->addUnmigratedDestinations(array(
@@ -153,6 +154,7 @@ class PhpbbUserMigration extends PhpbbMigration {
  * Import forum user avatars from phpbb to core picture field
  */
 class PhpbbAvatarMigration extends PhpbbMigration {
+  static $phpbb_type = 'Avatar';
   public function __construct($settings) {
    Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
    parent::__construct($settings);
@@ -166,7 +168,6 @@ class PhpbbAvatarMigration extends PhpbbMigration {
    else {
     $this->description = t('Migrate phpbb avatars from %source_name',array('%source_name' => $settings['name'],));
    }
-   $this->machineName = 'phpbb_' . $settings['machine_name'] . '_Avatar';
     
     $this->map = new MigrateSQLMap($this->machineName,
       array('user_avatar' => array(
@@ -232,9 +233,10 @@ class PhpbbAvatarMigration extends PhpbbMigration {
  * create the hierarchy of forums.
  */
 class PhpbbForumsMigration extends PhpbbMigration {
+  static $phpbb_type = 'Forums';
   protected $forum_weight = 0;
-  public function __construct() {
-    parent::__construct();
+  public function __construct($settings = array()) {
+    parent::__construct($settings);
     $this->description = t('Migrate forum structure from phpbb.');
 
     /**
@@ -242,7 +244,7 @@ class PhpbbForumsMigration extends PhpbbMigration {
      * first and that we get the children in the correct order.
      */
     $this->source = new MigrateSourceSQL(
-      Database::getConnection('default', 'phpbb')
+      Database::getConnection('default',  $settings['machine_name'])
       ->select('{forums}', 'f')
       ->fields('f', array('forum_id', 'parent_id', 'forum_name', 'forum_desc', 'forum_type'))
       ->condition('forum_type', 2, '<>')
@@ -258,11 +260,11 @@ class PhpbbForumsMigration extends PhpbbMigration {
       array(
         'forum_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
       ),
-      MigrateDestinationTerm::getKeySchema(), 'phpbb'
+      MigrateDestinationTerm::getKeySchema(), $settings['machine_name']
     );
     $this->addFieldMapping('name', 'forum_name');
     $this->addFieldMapping('description', 'forum_desc');
-    $this->addFieldMapping('parent', 'parent_id')->sourceMigration('PhpbbForums');
+    $this->addFieldMapping('parent', 'parent_id')->sourceMigration($this->machineName);
     $this->addFieldMapping('format')->defaultValue($this->importFormat);
 
     // Unmapped destination fields
@@ -324,12 +326,13 @@ class PhpbbForumsMigration extends PhpbbMigration {
  * Import forum topics from phpbb to core forum nodes
  */
 class PhpbbTopicMigration extends PhpbbMigration {
-  public function __construct() {
-    parent::__construct();
+  static $phpbb_type = 'Topic';
+  public function __construct($settings = array()) {
+    parent::__construct($settings);
     $this->description = t('Migrate individual forum topics from phpbb.');
-    $this->dependencies = array('PhpbbUser', 'PhpbbForums');
+    $this->dependencies = array($this->getMigrationName('User'), $this->getMigrationName('Forums'));
 
-    $query = Database::getConnection('default', 'phpbb')->select('{posts}', 'p');
+    $query = Database::getConnection('default', $settings['machine_name'])->select('{posts}', 'p');
     $query->leftJoin('{topics}', 't', 'p.topic_id = t.topic_id');
     $this->source = new MigrateSourceSQL(
       $query->fields('p', array(
@@ -356,15 +359,15 @@ class PhpbbTopicMigration extends PhpbbMigration {
           'alias' => 'p'
         )
       ),
-      MigrateDestinationNode::getKeySchema(), 'phpbb'
+      MigrateDestinationNode::getKeySchema(), $settings['machine_name']
     );
 
     // Put NULL in here due to error http://drupal.org/node/839770
     $this->addFieldMapping('nid')->defaultValue(NULL);
     $this->addFieldMapping('uid', 'poster_id')
-      ->sourceMigration('PhpbbUser')->defaultValue(1);
+      ->sourceMigration($this->getMigrationName('User'))->defaultValue(1);
     $this->addFieldMapping('taxonomy_forums', 'forum_id')
-      ->sourceMigration('PhpbbForums')
+      ->sourceMigration($this->getMigrationName('Forums'))
       ->arguments(array('source_type' => 'tid'));
 //    $this->addFieldMapping('hostname', 'poster_ip');
     $this->addFieldMapping('status', 'post_approved');
@@ -398,12 +401,13 @@ class PhpbbTopicMigration extends PhpbbMigration {
  * Import forum posts from phpbb to core forum comments
  */
 class PhpbbPostMigration extends PhpbbMigration {
-  public function __construct() {
-    parent::__construct();
+  static $phpbb_type = 'Post';
+  public function __construct($settings = array()) {
+    parent::__construct($settings);
     $this->description = t('Migrate individual forum posts from phpbb.');
-    $this->dependencies = array('PhpbbTopic');
+    $this->dependencies = array($this->getMigrationName('Topic'));
 
-    $query = Database::getConnection('default', 'phpbb')->select('{posts}', 'p');
+    $query = Database::getConnection('default', $settings['machine_name'])->select('{posts}', 'p');
     $query->leftJoin('{topics}', 't', 'p.topic_id = t.topic_id');
     $query->addField('t', 'topic_first_post_id');
     $this->source = new MigrateSourceSQL(
@@ -425,13 +429,13 @@ class PhpbbPostMigration extends PhpbbMigration {
       array(
         'post_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
       ),
-      MigrateDestinationComment::getKeySchema(), 'phpbb'
+      MigrateDestinationComment::getKeySchema(), $settings['machine_name']
     );
 
     $this->addFieldMapping('uid', 'poster_id')
-      ->sourceMigration('PhpbbUser')->defaultValue(1);
+      ->sourceMigration($this->getMigrationName('User'))->defaultValue(1);
     $this->addFieldMapping('nid', 'topic_first_post_id')
-      ->sourceMigration('PhpbbTopic');
+      ->sourceMigration($this->getMigrationName('Topic'));
     $this->addFieldMapping('hostname', 'poster_ip');
     $this->addFieldMapping('status', 'post_approved');
     $this->addFieldMapping('subject', 'post_subject');
@@ -463,6 +467,7 @@ class PhpbbPostMigration extends PhpbbMigration {
  * Import attachemtns from phpbb to Drupal file fields
  */
 class PhpbbAttachmentMigration extends PhpbbMigration {
+  static $phpbb_type = 'Attachment';
   // TODO: Automatically rename the files on disk before starting. Currently done by drush command.
 
   /**
@@ -470,13 +475,12 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
    */
   private $media = FALSE;
 
-  public function __construct() {
-    parent::__construct();
+  public function __construct($settings) {
+    parent::__construct($settings);
     $this->description = t('Migrate all phpbb attachments to a file field on the relavant D7 entity.');
+    $this->dependencies = array($this->getMigrationName('Post'), $this->getMigrationName('User'));
 
-    $this->dependencies = array('PhpbbPost', 'PhpbbUser');
-
-    $query = Database::getConnection('default', 'phpbb')
+    $query = Database::getConnection('default', $settings['machine_name'])
       ->select('{attachments}', 'a')
       ->fields('a', array(
         'attach_id', 'post_msg_id', 'poster_id',
@@ -510,15 +514,15 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
       array(
         'attach_id' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
       ),
-      $keySchema, 'phpbb'
+      $keySchema, $settings['machine_name']
     );
     
     // Just map the incoming URL to the destination's 'uri'
     $this->addFieldMapping('uri', 'real_filename');
-    $this->addFieldMapping('uid', 'poster_id')->sourceMigration('PhpbbUser');
+    $this->addFieldMapping('uid', 'poster_id')->sourceMigration($this->getMigrationName('User'));
     $this->addFieldMapping('timestamp', 'filetime');
-    $this->addFieldMapping('topic_id', 'post_msg_id')->sourceMigration('PhpbbTopic')->issueGroup(t('DNM'));
-    $this->addFieldMapping('comment_id', 'post_msg_id')->sourceMigration('PhpbbPost')->issueGroup(t('DNM'));
+    $this->addFieldMapping('topic_id', 'post_msg_id')->sourceMigration($this->getMigrationName('Topic'))->issueGroup(t('DNM'));
+    $this->addFieldMapping('comment_id', 'post_msg_id')->sourceMigration($this->getMigrationName('Post'))->issueGroup(t('DNM'));
     $this->addFieldMapping(NULL, 'topic_first_post_id')->issueGroup(t('DNM'));
 
     // Unmapped destination fields
