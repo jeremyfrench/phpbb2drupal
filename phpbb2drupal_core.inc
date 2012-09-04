@@ -585,7 +585,7 @@ class PhpbbAttachmentMigration extends PhpbbMigration {
       $pattern = '/\[attachment=\d+\]' . basename($filename) . '\[\/attachment\]/';
 
       // We should only find one match so limit to 1 replacement
-      $result = preg_replace($pattern, $tag, $field, 1, &$count);
+      $result = preg_replace($pattern, $tag, $field, 1, $count);
 
       // If no replacements were done, append tag to end of field
       return $count ? $result : $field . "\n{$tag}";
