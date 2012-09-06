@@ -62,7 +62,7 @@ abstract class PhpbbMigration extends DynamicMigration {
     Database::addConnectionInfo($settings['machine_name'], 'default', $settings['db']);
     $this->migration_settings = $settings;
     //TODO: so that each set of migrations is in it's own group.
-    parent::__construct(MigrateGroup::getInstance('PhpBB'));
+    parent::__construct(MigrateGroup::getInstance('phpbb_' . $this->migration_settings['machine_name']));
     $this->machineName = $this->getMigrationName($called_class::$phpbb_type);
     
     $this->importFormat = $settings['text_format'];

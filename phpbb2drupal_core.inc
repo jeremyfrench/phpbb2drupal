@@ -384,7 +384,7 @@ class PhpbbTopicMigration extends PhpbbMigration {
     
     // Unmapped destination fields
     $this->addUnmigratedDestinations(array(
-      'is_new', 'revision', 'revision_uid', 'promote', 'sticky', 'comment', 'path', 'pathauto'
+      'is_new', 'revision', 'revision_uid', 'promote', 'comment', 'path', 'pathauto'
     ));
   }
 
